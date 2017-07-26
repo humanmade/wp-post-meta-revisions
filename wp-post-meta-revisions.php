@@ -137,17 +137,21 @@ class WP_Post_Meta_Revisioning {
 		$values = array();
 		$place_holders = array();
 
+		$post_meta_values = $wpdb->get_results( $wpdb->prepare( "SELECT meta_key, meta_value FROM $wpdb->postmeta WHERE post_id = %s",$post_id ) );
+
 		// Save revisioned meta fields.
 		foreach ( $this->_wp_post_revision_meta_keys() as $meta_key ) {
-			$meta_value = get_post_meta( $post_id, $meta_key );
+
+			$meta_value = array_values( array_filter( array_map( function ( $meta ) use ( $meta_key ) {
+				return $meta->meta_key === $meta_key ? $meta->meta_value : false;
+			}, $post_meta_values ) ) )[0];
+
+			$meta_value = apply_filters( 'sc_pre_clone_post_meta', $meta_value, $meta_key, $post_id );
 
 			// Check for meta value, if empty then meta key doesnt exist for this post.
 			if ( empty( $meta_value ) ) {
 				continue 1;
 			}
-
-			// Serialize the meta data value.
-			$meta_value = serialize( $meta_value );
 
 			// Push the value into our existing array.
 			array_push( $values, $revision_id, $meta_key, $meta_value );
