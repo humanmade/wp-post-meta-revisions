@@ -146,6 +146,31 @@ class WP_Post_Meta_Revisioning {
 	}
 
 	/**
+	 * Get revisioned meta fields of a post
+	 *
+	 * @param int $post_id Post ID.
+	 *
+	 * @return array|null
+	 */
+	public function get_post_revisioned_meta_fields( $post_id ) {
+		$revisioned_meta_keys = $this->wp_post_revision_meta_keys();
+
+		if ( ! is_array( $revisioned_meta_keys ) || empty( $revisioned_meta_keys ) ) {
+			return null;
+		}
+
+		$post_meta_keys = array_keys( get_post_custom( $post_id ) );
+
+		if ( ! is_array( $post_meta_keys ) || empty( $post_meta_keys ) ) {
+			return null;
+		}
+
+		$meta_keys = array_intersect( $post_meta_keys, $revisioned_meta_keys );
+
+		return $meta_keys;
+	}
+
+	/**
 	 * Save the revisioned meta fields.
 	 *
 	 * @param int $revision_id The ID of the revision to save the meta to.
@@ -153,11 +178,16 @@ class WP_Post_Meta_Revisioning {
 	 * @since 4.5.0
 	 */
 	public function wp_save_revisioned_meta_fields( $revision_id ) {
-		$revision = get_post( $revision_id );
-		$post_id  = $revision->post_parent;
+		$revision  = get_post( $revision_id );
+		$post_id   = $revision->post_parent;
+		$meta_keys = $this->get_post_revisioned_meta_fields( $post_id );
+
+		if ( empty( $meta_keys ) ) {
+			return;
+		}
 
 		// Save revisioned meta fields.
-		foreach ( $this->wp_post_revision_meta_keys() as $meta_key ) {
+		foreach ( $meta_keys as $meta_key ) {
 			$meta_value = get_post_meta( $post_id, $meta_key );
 
 			/*
@@ -177,19 +207,25 @@ class WP_Post_Meta_Revisioning {
 	 * @since 4.5.0
 	 */
 	public function wp_restore_post_revision_meta( $post_id, $revision_id ) {
-		// Restore revisioned meta fields.
-		$metas_revisioned = $this->wp_post_revision_meta_keys();
-		if ( isset( $metas_revisioned ) && 0 !== count( $metas_revisioned ) ) {
-			foreach ( $metas_revisioned as $meta_key ) {
-				// Clear any existing metas.
-				delete_post_meta( $post_id, $meta_key );
-				// Get the stored meta, not stored === blank.
-				$meta_values = get_post_meta( $revision_id, $meta_key, true );
-				if ( 0 !== count( $meta_values ) && is_array( $meta_values ) ) {
-					foreach ( $meta_values as $meta_value ) {
-						add_post_meta( $post_id, $meta_key, wp_slash( $meta_value ) );
-					}
-				}
+		$metas_revisioned = $this->get_post_revisioned_meta_fields( $revision_id );
+
+		if ( empty( $metas_revisioned ) ) {
+			return;
+		}
+
+		foreach ( $metas_revisioned as $meta_key ) {
+			// Clear any existing metas.
+			delete_post_meta( $post_id, $meta_key );
+
+			// Get the stored meta, not stored === blank.
+			$meta_values = get_post_meta( $revision_id, $meta_key, true );
+
+			if ( ! is_array( $meta_values ) || 0 === count( $meta_values ) ) {
+				continue;
+			}
+
+			foreach ( $meta_values as $meta_value ) {
+				add_post_meta( $post_id, $meta_key, wp_slash( $meta_value ) );
 			}
 		}
 	}
